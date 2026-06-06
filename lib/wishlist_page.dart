@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_text_styles.dart';
+import 'data/dummy_products.dart';
+import 'models/product.dart';
 import 'models/wishlist_item.dart';
+import 'product_details_page.dart';
 import 'services/cart_service.dart';
 import 'services/wishlist_service.dart';
 
@@ -55,6 +58,38 @@ class _WishlistPageState extends State<WishlistPage> {
         content: Text(message),
         backgroundColor: AppColors.backgroundDark,
       ),
+    );
+  }
+
+  void _openProductDetails(WishlistItem item) {
+    // Try to find the full product from dummyProducts
+    Product? matchingProduct;
+    try {
+      matchingProduct = dummyProducts.firstWhere(
+        (p) => p.id == item.productId,
+      );
+    } catch (_) {
+      // Product not found in dummyProducts
+    }
+    
+    // Use full product if found, otherwise construct from wishlist item
+    final product = matchingProduct ?? Product(
+      id: item.productId,
+      name: item.name,
+      description: 'Premium sports apparel',
+      price: item.price.toDouble(),
+      discountedPrice: item.price.toDouble(),
+      category: 'Product',
+      brand: 'Sports Brand',
+      imagePath: item.imagePath,
+      stockQuantity: 5,
+      sizes: const ['S', 'M', 'L', 'XL'],
+      featured: false,
+      createdAt: DateTime.now(),
+    );
+    
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ProductDetailsPage(product: product)),
     );
   }
 
@@ -118,6 +153,7 @@ class _WishlistPageState extends State<WishlistPage> {
                             priceText: _formatPrice(item.price),
                             onAddToCart: () => _addToCart(item),
                             onRemove: () => _removeFromWishlist(item),
+                            onTap: () => _openProductDetails(item),
                           );
                         },
                       ),
@@ -136,29 +172,33 @@ class _WishlistItemTile extends StatelessWidget {
     required this.priceText,
     required this.onAddToCart,
     required this.onRemove,
+    required this.onTap,
   });
 
   final WishlistItem item;
   final String priceText;
   final VoidCallback onAddToCart;
   final VoidCallback onRemove;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.sm),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.shadow,
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ClipRRect(
@@ -241,6 +281,7 @@ class _WishlistItemTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
