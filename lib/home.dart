@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_text_styles.dart';
+import 'product_details_page.dart';
 import 'widgets/app_search_bar.dart';
 import 'widgets/bottom_nav_bar.dart';
 import 'widgets/category_card.dart';
@@ -108,6 +109,12 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _activeTabIndex = index;
     });
+  }
+
+  void _openProductDetails(Product product) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ProductDetailsPage(product: product)),
+    );
   }
 
   Widget _buildSectionHeader(String title) {
@@ -277,16 +284,22 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         itemBuilder: (context, index) {
                           final item = filteredProducts[index];
-                          return ProductCard(
+                          return GestureDetector(
                             key: ValueKey(item.id),
-                            imagePath: item.imagePath,
-                            name: item.name,
-                            price: _formatPrice(item.discountedPrice),
-                            originalPrice: item.discountedPrice < item.price
-                                ? _formatPrice(item.price)
-                                : null,
-                            wishlisted: _wishlistedProductIds.contains(item.id),
-                            onWishlistToggle: () => _toggleWishlist(item.id),
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _openProductDetails(item),
+                            child: ProductCard(
+                              imagePath: item.imagePath,
+                              name: item.name,
+                              price: _formatPrice(item.discountedPrice),
+                              originalPrice: item.discountedPrice < item.price
+                                  ? _formatPrice(item.price)
+                                  : null,
+                              wishlisted: _wishlistedProductIds.contains(
+                                item.id,
+                              ),
+                              onWishlistToggle: () => _toggleWishlist(item.id),
+                            ),
                           );
                         },
                       );
