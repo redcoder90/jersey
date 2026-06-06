@@ -37,8 +37,7 @@ class FeaturedBanner extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(
-                fit: FlexFit.loose,
+              SizedBox(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,8 +77,7 @@ class FeaturedBanner extends StatelessWidget {
                 height: isCompact ? AppSpacing.lg : 0,
                 width: isCompact ? 0 : AppSpacing.lg,
               ),
-              Flexible(
-                fit: FlexFit.loose,
+              SizedBox(
                 child: Align(
                   alignment: isCompact
                       ? Alignment.center
