@@ -15,6 +15,7 @@ class CartPage extends StatefulWidget {
 
 class _CartPageState extends State<CartPage> {
   final CartService _cartService = CartService();
+  final Set<String> _selectedProductIds = {};
   late final Stream<List<CartItem>> _cartStream = _cartService.cartStream();
 
   String _formatPrice(int amount) {
@@ -32,11 +33,48 @@ class _CartPageState extends State<CartPage> {
 
   Future<void> _removeItem(CartItem item) async {
     try {
+      _selectedProductIds.remove(item.productId);
       await _cartService.removeItem(item.productId);
     } catch (_) {
       if (!mounted) return;
       _showMessage('Unable to remove cart item');
     }
+  }
+
+  void _syncSelectionWithCart(List<CartItem> items) {
+    final cartProductIds = items.map((item) => item.productId).toSet();
+    _selectedProductIds.removeWhere(
+      (productId) => !cartProductIds.contains(productId),
+    );
+  }
+
+  void _toggleItemSelection(String productId, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedProductIds.add(productId);
+      } else {
+        _selectedProductIds.remove(productId);
+      }
+    });
+  }
+
+  void _toggleSelectAll(List<CartItem> items, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedProductIds.addAll(items.map((item) => item.productId));
+      } else {
+        _selectedProductIds.clear();
+      }
+    });
+  }
+
+  void _checkoutSelected(List<CartItem> selectedItems) {
+    if (selectedItems.isEmpty) {
+      _showMessage('Please select at least one item');
+      return;
+    }
+
+    _showMessage('${selectedItems.length} item(s) ready for checkout');
   }
 
   void _showMessage(String message) {
@@ -66,27 +104,30 @@ class _CartPageState extends State<CartPage> {
           }
 
           final items = snapshot.data!;
-          final cartTotal = items.fold<int>(
+          _syncSelectionWithCart(items);
+
+          final selectedItems = items
+              .where((item) => _selectedProductIds.contains(item.productId))
+              .toList(growable: false);
+          final selectedTotal = selectedItems.fold<int>(
             0,
             (total, item) => total + item.totalPrice,
           );
+          final allSelected =
+              items.isNotEmpty && _selectedProductIds.length == items.length;
+          final partiallySelected =
+              _selectedProductIds.isNotEmpty && !allSelected;
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.xl,
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                ),
-                child: Text(
-                  'Cart',
-                  style: AppTextStyles.headingLarge.copyWith(
-                    color: AppColors.backgroundDark,
-                  ),
-                ),
+              _CartHeader(
+                itemCount: items.length,
+                allSelected: allSelected,
+                partiallySelected: partiallySelected,
+                onSelectAllChanged: items.isEmpty
+                    ? null
+                    : (selected) => _toggleSelectAll(items, selected ?? false),
               ),
               Expanded(
                 child: items.isEmpty
@@ -109,9 +150,18 @@ class _CartPageState extends State<CartPage> {
                           final item = items[index];
                           return _CartItemTile(
                             item: item,
+                            selected: _selectedProductIds.contains(
+                              item.productId,
+                            ),
                             priceText: _formatPrice(item.price),
+                            subtotalText: _formatPrice(item.totalPrice),
+                            onSelectedChanged: (selected) =>
+                                _toggleItemSelection(
+                                  item.productId,
+                                  selected ?? false,
+                                ),
                             onDecrease: item.quantity == 1
-                                ? null
+                                ? () => _removeItem(item)
                                 : () =>
                                       _updateQuantity(item, item.quantity - 1),
                             onIncrease: () =>
@@ -121,7 +171,12 @@ class _CartPageState extends State<CartPage> {
                         },
                       ),
               ),
-              _CartTotalBar(totalText: _formatPrice(cartTotal)),
+              _CartTotalBar(
+                selectedCount: selectedItems.length,
+                totalText: _formatPrice(selectedTotal),
+                checkoutEnabled: selectedItems.isNotEmpty,
+                onCheckout: () => _checkoutSelected(selectedItems),
+              ),
             ],
           );
         },
@@ -130,17 +185,88 @@ class _CartPageState extends State<CartPage> {
   }
 }
 
+class _CartHeader extends StatelessWidget {
+  const _CartHeader({
+    required this.itemCount,
+    required this.allSelected,
+    required this.partiallySelected,
+    required this.onSelectAllChanged,
+  });
+
+  final int itemCount;
+  final bool allSelected;
+  final bool partiallySelected;
+  final ValueChanged<bool?>? onSelectAllChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.xl,
+        AppSpacing.lg,
+        AppSpacing.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Cart',
+            style: AppTextStyles.headingLarge.copyWith(
+              color: AppColors.backgroundDark,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$itemCount item${itemCount == 1 ? '' : 's'}',
+                  style: AppTextStyles.label.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              Checkbox(
+                value: partiallySelected ? null : allSelected,
+                tristate: true,
+                activeColor: AppColors.accent,
+                onChanged: onSelectAllChanged,
+              ),
+              Text(
+                'Select All',
+                style: AppTextStyles.label.copyWith(
+                  color: onSelectAllChanged == null
+                      ? AppColors.textSecondary
+                      : AppColors.backgroundDark,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CartItemTile extends StatelessWidget {
   const _CartItemTile({
     required this.item,
+    required this.selected,
     required this.priceText,
+    required this.subtotalText,
+    required this.onSelectedChanged,
     required this.onDecrease,
     required this.onIncrease,
     required this.onDelete,
   });
 
   final CartItem item;
+  final bool selected;
   final String priceText;
+  final String subtotalText;
+  final ValueChanged<bool?> onSelectedChanged;
   final VoidCallback? onDecrease;
   final VoidCallback onIncrease;
   final VoidCallback onDelete;
@@ -161,12 +287,23 @@ class _CartItemTile extends StatelessWidget {
         ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          SizedBox(
+            width: 36,
+            child: Checkbox(
+              value: selected,
+              activeColor: AppColors.accent,
+              onChanged: onSelectedChanged,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
           ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: Container(
-              width: 82,
-              height: 82,
+              width: 72,
+              height: 72,
               color: AppColors.surfaceSoft,
               padding: const EdgeInsets.all(AppSpacing.xs),
               child: Image.asset(
@@ -182,20 +319,47 @@ class _CartItemTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w800,
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: IconButton(
+                        tooltip: 'Remove',
+                        onPressed: onDelete,
+                        icon: const Icon(Icons.delete_outline),
+                        iconSize: 20,
+                        padding: EdgeInsets.zero,
+                        color: AppColors.error,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   priceText,
                   style: AppTextStyles.label.copyWith(
                     color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Subtotal $subtotalText',
+                  style: AppTextStyles.label.copyWith(
+                    color: AppColors.backgroundDark,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
@@ -206,12 +370,6 @@ class _CartItemTile extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          IconButton(
-            tooltip: 'Remove',
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline),
-            color: AppColors.error,
           ),
         ],
       ),
@@ -280,9 +438,17 @@ class _QuantityButton extends StatelessWidget {
 }
 
 class _CartTotalBar extends StatelessWidget {
-  const _CartTotalBar({required this.totalText});
+  const _CartTotalBar({
+    required this.selectedCount,
+    required this.totalText,
+    required this.checkoutEnabled,
+    required this.onCheckout,
+  });
 
+  final int selectedCount;
   final String totalText;
+  final bool checkoutEnabled;
+  final VoidCallback onCheckout;
 
   @override
   Widget build(BuildContext context) {
@@ -308,18 +474,48 @@ class _CartTotalBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              'Total',
-              style: AppTextStyles.label.copyWith(
-                color: AppColors.textSecondary,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$selectedCount selected',
+                  style: AppTextStyles.label.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xxs),
+                Text(
+                  totalText,
+                  style: AppTextStyles.headingMedium.copyWith(
+                    color: AppColors.backgroundDark,
+                    fontSize: 24,
+                  ),
+                ),
+              ],
             ),
           ),
-          Text(
-            totalText,
-            style: AppTextStyles.headingMedium.copyWith(
-              color: AppColors.backgroundDark,
-              fontSize: 24,
+          ElevatedButton(
+            onPressed: checkoutEnabled ? onCheckout : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              disabledBackgroundColor: AppColors.border,
+              foregroundColor: Colors.white,
+              disabledForegroundColor: AppColors.textSecondary,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg,
+                vertical: AppSpacing.md,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            child: Text(
+              'Checkout',
+              style: AppTextStyles.label.copyWith(
+                color: checkoutEnabled ? Colors.white : AppColors.textSecondary,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],
