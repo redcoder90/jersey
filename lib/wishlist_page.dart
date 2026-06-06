@@ -65,29 +65,29 @@ class _WishlistPageState extends State<WishlistPage> {
     // Try to find the full product from dummyProducts
     Product? matchingProduct;
     try {
-      matchingProduct = dummyProducts.firstWhere(
-        (p) => p.id == item.productId,
-      );
+      matchingProduct = dummyProducts.firstWhere((p) => p.id == item.productId);
     } catch (_) {
       // Product not found in dummyProducts
     }
-    
+
     // Use full product if found, otherwise construct from wishlist item
-    final product = matchingProduct ?? Product(
-      id: item.productId,
-      name: item.name,
-      description: 'Premium sports apparel',
-      price: item.price.toDouble(),
-      discountedPrice: item.price.toDouble(),
-      category: 'Product',
-      brand: 'Sports Brand',
-      imagePath: item.imagePath,
-      stockQuantity: 5,
-      sizes: const ['S', 'M', 'L', 'XL'],
-      featured: false,
-      createdAt: DateTime.now(),
-    );
-    
+    final product =
+        matchingProduct ??
+        Product(
+          id: item.productId,
+          name: item.name,
+          description: 'Premium sports apparel',
+          price: item.price.toDouble(),
+          discountedPrice: item.price.toDouble(),
+          category: 'Product',
+          brand: 'Sports Brand',
+          imagePath: item.imagePath,
+          stockQuantity: 5,
+          sizes: const ['S', 'M', 'L', 'XL'],
+          featured: false,
+          createdAt: DateTime.now(),
+        );
+
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => ProductDetailsPage(product: product)),
     );
@@ -199,89 +199,89 @@ class _WishlistItemTile extends StatelessWidget {
           ],
         ),
         child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              width: 76,
-              height: 76,
-              color: AppColors.surfaceSoft,
-              padding: const EdgeInsets.all(AppSpacing.xs),
-              child: Image.asset(
-                item.imagePath,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) =>
-                    const Icon(Icons.broken_image, size: 34),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                width: 76,
+                height: 76,
+                color: AppColors.surfaceSoft,
+                padding: const EdgeInsets.all(AppSpacing.xs),
+                child: Image.asset(
+                  item.imagePath,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) =>
+                      const Icon(Icons.broken_image, size: 34),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        item.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.body.copyWith(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w800,
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 36,
+                        height: 36,
+                        child: IconButton(
+                          tooltip: 'Remove from wishlist',
+                          onPressed: onRemove,
+                          icon: const Icon(Icons.favorite),
+                          iconSize: 20,
+                          padding: EdgeInsets.zero,
+                          color: AppColors.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    priceText,
+                    style: AppTextStyles.label.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: ElevatedButton.icon(
+                      onPressed: onAddToCart,
+                      icon: const Icon(Icons.shopping_cart_outlined, size: 18),
+                      label: const Text('Add to Cart'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
                     ),
-                    SizedBox(
-                      width: 36,
-                      height: 36,
-                      child: IconButton(
-                        tooltip: 'Remove from wishlist',
-                        onPressed: onRemove,
-                        icon: const Icon(Icons.favorite),
-                        iconSize: 20,
-                        padding: EdgeInsets.zero,
-                        color: AppColors.error,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  priceText,
-                  style: AppTextStyles.label.copyWith(
-                    color: AppColors.textSecondary,
                   ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: ElevatedButton.icon(
-                    onPressed: onAddToCart,
-                    icon: const Icon(Icons.shopping_cart_outlined, size: 18),
-                    label: const Text('Add to Cart'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
