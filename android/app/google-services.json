@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "388852557650",
+    "project_id": "jersey-drip-61cc0",
+    "storage_bucket": "jersey-drip-61cc0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:388852557650:android:dcf0aae5c13bbc3e0efc8b",
+        "android_client_info": {
+          "package_name": "com.example.jerseyapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "388852557650-ca89db3rh99580uj6p1oa33oo7osjm08.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDf5DGTzhT02tW7fF5N9B_qZWvrYKOe8Sg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "388852557650-ca89db3rh99580uj6p1oa33oo7osjm08.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
