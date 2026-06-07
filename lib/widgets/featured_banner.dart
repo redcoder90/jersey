@@ -30,17 +30,23 @@ class FeaturedBanner extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isCompact = constraints.maxWidth < 520;
-          final bannerHeight = isCompact ? 232.0 : 260.0;
+          final bannerHeight = isCompact ? 260.0 : 260.0;
 
           return SizedBox(
             height: bannerHeight,
             child: Stack(
               clipBehavior: Clip.hardEdge,
               children: [
-                Positioned.fill(
+                Positioned(
+                  left: isCompact ? 0 : constraints.maxWidth * 0.42,
+                  right: 0,
+                  bottom: isCompact ? AppSpacing.xs : AppSpacing.sm,
+                  height: isCompact ? 92 : 208,
                   child: _AnimatedJerseyStrip(
                     compact: isCompact,
-                    availableWidth: constraints.maxWidth,
+                    availableWidth: isCompact
+                        ? constraints.maxWidth
+                        : constraints.maxWidth * 0.58,
                   ),
                 ),
                 Positioned.fill(
@@ -49,22 +55,24 @@ class FeaturedBanner extends StatelessWidget {
                       gradient: LinearGradient(
                         colors: [
                           AppColors.backgroundDeep.withAlpha(240),
-                          AppColors.backgroundDeep.withAlpha(150),
-                          AppColors.backgroundDeep.withAlpha(40),
+                          AppColors.backgroundDeep.withAlpha(118),
+                          AppColors.backgroundDeep.withAlpha(0),
                         ],
-                        stops: const [0, 0.46, 1],
+                        stops: const [0, 0.54, 1],
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
                       ),
                     ),
                   ),
                 ),
-                Align(
-                  alignment: Alignment.centerLeft,
+                Positioned(
+                  left: 0,
+                  top: isCompact ? AppSpacing.sm : null,
+                  bottom: isCompact ? null : 0,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxWidth: isCompact
-                          ? constraints.maxWidth * 0.78
+                          ? constraints.maxWidth * 0.82
                           : constraints.maxWidth * 0.46,
                     ),
                     child: Column(
@@ -80,8 +88,8 @@ class FeaturedBanner extends StatelessWidget {
                         ),
                         const SizedBox(height: AppSpacing.sm),
                         Text(
-                          'Fresh club and national team looks, moving through the drip wall.',
-                          maxLines: isCompact ? 3 : 2,
+                          'Discover the latest club and national team kits',
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.body.copyWith(
                             color: Colors.white70,
@@ -146,41 +154,40 @@ class _AnimatedJerseyStripState extends State<_AnimatedJerseyStrip>
 
   @override
   Widget build(BuildContext context) {
-    final gap = widget.compact ? 12.0 : 16.0;
-    final itemWidth = (widget.availableWidth * (widget.compact ? 0.34 : 0.2))
-        .clamp(96.0, widget.compact ? 138.0 : 172.0);
-    final itemHeight = widget.compact ? 178.0 : 210.0;
+    final gap = widget.compact ? 10.0 : 16.0;
+    final itemWidth = (widget.availableWidth * (widget.compact ? 0.24 : 0.25))
+        .clamp(68.0, widget.compact ? 86.0 : 154.0);
+    final itemHeight = widget.compact ? 88.0 : 188.0;
     final sequenceWidth = (itemWidth + gap) * _assets.length;
 
     return ClipRect(
-      child: Align(
-        alignment: Alignment.centerRight,
+      child: OverflowBox(
+        alignment: Alignment.centerLeft,
+        minWidth: sequenceWidth * 2,
+        maxWidth: sequenceWidth * 2,
+        minHeight: itemHeight,
+        maxHeight: itemHeight,
         child: AnimatedBuilder(
           animation: _controller,
-          builder: (context, child) {
-            final offset = -sequenceWidth + (_controller.value * sequenceWidth);
-            return Transform.translate(offset: Offset(offset, 0), child: child);
-          },
           child: SizedBox(
             width: sequenceWidth * 2,
+            height: itemHeight,
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                _JerseySequence(
-                  assets: _assets,
-                  itemWidth: itemWidth,
-                  itemHeight: itemHeight,
-                  gap: gap,
-                ),
-                _JerseySequence(
-                  assets: _assets,
-                  itemWidth: itemWidth,
-                  itemHeight: itemHeight,
-                  gap: gap,
-                ),
+                for (var i = 0; i < 2; i++)
+                  _JerseySequence(
+                    assets: _assets,
+                    itemWidth: itemWidth,
+                    itemHeight: itemHeight,
+                    gap: gap,
+                  ),
               ],
             ),
           ),
+          builder: (context, child) {
+            final offset = -_controller.value * sequenceWidth;
+            return Transform.translate(offset: Offset(offset, 0), child: child);
+          },
         ),
       ),
     );
