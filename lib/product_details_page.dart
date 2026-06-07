@@ -49,12 +49,12 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   }
 
   bool _selectedSizeAvailable(Product currentProduct) {
+    if (currentProduct.sizes.isEmpty) return false;
     return currentProduct.isSizeAvailable(_selectedSize);
   }
 
   String _initialSelectedSize() {
-    final defaultSize = product.defaultSize;
-    return defaultSize.isNotEmpty ? defaultSize : 'One Size';
+    return product.defaultSize;
   }
 
   String _formatPrice(double amount) {
@@ -413,11 +413,14 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    selectedSizeStock == 0
+                    currentProduct.sizes.isEmpty
+                        ? 'Size information unavailable'
+                        : selectedSizeStock == 0
                         ? 'Out of stock'
                         : 'Only $selectedSizeStock left in stock',
                     style: AppTextStyles.label.copyWith(
-                      color: selectedSizeStock == 0
+                      color:
+                          currentProduct.sizes.isEmpty || selectedSizeStock == 0
                           ? AppColors.error
                           : AppColors.success,
                     ),

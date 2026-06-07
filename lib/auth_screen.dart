@@ -261,7 +261,9 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'Premium football jersey commerce with secure authentication.',
+                    _isLogin
+                        ? 'Sign in to continue shopping'
+                        : 'Join Jersey Drip and explore premium sportswear',
                     textAlign: TextAlign.center,
                     style: AppTextStyles.body.copyWith(color: Colors.white70),
                   ),
@@ -287,8 +289,8 @@ class _AuthScreenState extends State<AuthScreen> {
                               ? 'Welcome back'
                               : 'Create your account',
                           subtitle: _isLogin
-                              ? 'Sign in to continue with Jersey Drip.'
-                              : 'Create your account and start shopping.',
+                              ? 'Sign in to continue shopping.'
+                              : 'Join Jersey Drip and explore premium sportswear.',
                         ),
                         const SizedBox(height: AppSpacing.xl),
                         Form(

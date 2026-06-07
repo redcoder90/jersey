@@ -342,7 +342,6 @@ class CartService {
             data['stock_quantity'] ??
             data['stock'],
       ),
-      category: _readString(data['category']),
     );
   }
 
@@ -418,7 +417,6 @@ class CartService {
             data['stock_quantity'] ??
             data['stock'],
       ),
-      category: _readString(data['category']),
     )[size];
   }
 
@@ -426,7 +424,6 @@ class CartService {
     Object? value, {
     required int fallbackPrice,
     required int fallbackStock,
-    required String category,
   }) {
     if (value is Map) {
       final variants = value.map((key, rawVariant) {
@@ -455,29 +452,7 @@ class CartService {
       if (variants.isNotEmpty) return variants;
     }
 
-    return _defaultSizeVariantsForCategory(
-      category,
-      price: fallbackPrice,
-      stock: fallbackStock,
-    );
-  }
-
-  Map<String, SizeVariant> _defaultSizeVariantsForCategory(
-    String category, {
-    required int price,
-    required int stock,
-  }) {
-    final normalizedCategory = category.toLowerCase();
-    final labels = switch (normalizedCategory) {
-      'jersey' => const ['S', 'M', 'L', 'XL'],
-      'socks' => const ['S', 'M', 'L'],
-      'trainers' || 'boots' || 'shoes' => const ['40', '41', '42', '43', '44'],
-      _ => const ['One Size'],
-    };
-
-    return {
-      for (final size in labels) size: SizeVariant(price: price, stock: stock),
-    };
+    return const <String, SizeVariant>{};
   }
 
   String _cartDocumentId(String productId, String size) {

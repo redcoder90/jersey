@@ -89,7 +89,7 @@ class _CardPaymentPageState extends State<CardPaymentPage> {
   Widget build(BuildContext context) {
     return PaymentInputShell(
       title: 'Card Payment',
-      subtitle: 'Mock card payment only. No real card will be charged.',
+      subtitle: 'Secure payment required to continue',
       child: Form(
         key: _formKey,
         child: Column(

@@ -60,7 +60,7 @@ class _BkashPaymentPageState extends State<BkashPaymentPage> {
   Widget build(BuildContext context) {
     return PaymentInputShell(
       title: 'bKash Payment',
-      subtitle: 'Mock payment only. No real charge will be made.',
+      subtitle: 'Tap to proceed with payment',
       child: Form(
         key: _formKey,
         child: Column(

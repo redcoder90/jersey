@@ -95,7 +95,7 @@ class Product {
   }
 
   String get defaultSize {
-    if (sizes.isEmpty) return 'One Size';
+    if (sizes.isEmpty) return '';
     return getSmallestAvailableSize(sizes);
   }
 }

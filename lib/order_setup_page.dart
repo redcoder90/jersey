@@ -30,7 +30,7 @@ class _OrderSetupPageState extends State<OrderSetupPage> {
   final _addressController = TextEditingController();
   final _cartService = CartService();
   bool _isLoadingAddress = true;
-  String _selectedSize = 'M';
+  String _selectedSize = '';
 
   List<CartItem> get _items => _itemsState;
   late List<CartItem> _itemsState;
@@ -47,7 +47,7 @@ class _OrderSetupPageState extends State<OrderSetupPage> {
         ? firstItemSize
         : defaultSize.isNotEmpty
         ? defaultSize
-        : 'M';
+        : '';
     _loadSavedAddress();
   }
 

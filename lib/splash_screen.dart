@@ -64,7 +64,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Premium sports commerce powered by Firebase',
+                  'Your destination for premium jerseys & sportswear',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.body.copyWith(color: Colors.white70),
                 ),
