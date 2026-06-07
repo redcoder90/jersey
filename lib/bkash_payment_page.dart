@@ -1,23 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'checkout_verification_page.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_text_styles.dart';
 import 'models/checkout_session.dart';
+import 'otp_verification_screen.dart';
+import 'providers/auth_otp_controller.dart';
+import 'services/payment_session_service.dart';
 
-class BkashPaymentPage extends StatefulWidget {
+class BkashPaymentPage extends ConsumerStatefulWidget {
   const BkashPaymentPage({super.key, required this.session});
 
   final CheckoutSession session;
 
   @override
-  State<BkashPaymentPage> createState() => _BkashPaymentPageState();
+  ConsumerState<BkashPaymentPage> createState() => _BkashPaymentPageState();
 }
 
-class _BkashPaymentPageState extends State<BkashPaymentPage> {
+class _BkashPaymentPageState extends ConsumerState<BkashPaymentPage> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
+  final _paymentSessionService = PaymentSessionService();
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -25,23 +31,57 @@ class _BkashPaymentPageState extends State<BkashPaymentPage> {
     super.dispose();
   }
 
-  void _continue() {
+  Future<void> _continue() async {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CheckoutVerificationPage(
-          result: PaymentResult(
-            session: widget.session,
-            paymentMethod: 'bkash',
-            transactionId: _fakeTransactionId('BK'),
-          ),
+    setState(() {
+      _loading = true;
+    });
+
+    try {
+      final result = PaymentResult(
+        session: widget.session,
+        paymentMethod: 'bkash',
+        transactionId: _fakeTransactionId('BK'),
+      );
+      final paymentSession = await _paymentSessionService.createPaymentSession(
+        paymentMethod: result.paymentMethod,
+        transactionId: result.transactionId,
+      );
+      final email = FirebaseAuth.instance.currentUser?.email ?? '';
+      final verificationId = await ref
+          .read(authOtpControllerProvider.notifier)
+          .sendPaymentOtp(
+            email: email,
+            paymentSessionId: paymentSession.sessionId,
+          );
+
+      if (!mounted) return;
+      Navigator.pushNamed(
+        context,
+        OTPVerificationScreen.routeName,
+        arguments: OtpVerificationArgs.payment(
+          email: email,
+          verificationId: verificationId,
+          paymentSessionId: paymentSession.sessionId,
+          paymentResult: result,
         ),
-      ),
-    );
+      );
+    } catch (_) {
+      if (!mounted) return;
+      final error = ref.read(authOtpControllerProvider).error;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error ?? 'Unable to send payment OTP.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
   }
 
   String? _validatePhone(String? value) {
@@ -77,9 +117,18 @@ class _BkashPaymentPageState extends State<BkashPaymentPage> {
             ),
             const SizedBox(height: AppSpacing.xl),
             ElevatedButton(
-              onPressed: _continue,
+              onPressed: _loading ? null : _continue,
               style: primaryPaymentButtonStyle(),
-              child: const Text('Continue'),
+              child: _loading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Continue'),
             ),
           ],
         ),

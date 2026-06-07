@@ -42,7 +42,7 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage>
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        unawaited(_verifyEmailThenCreateOrder());
+        unawaited(_verifyOtpThenCreateOrder());
       }
     });
   }
@@ -53,7 +53,7 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage>
     super.dispose();
   }
 
-  Future<void> _verifyEmailThenCreateOrder() async {
+  Future<void> _verifyOtpThenCreateOrder() async {
     try {
       // CRITICAL: Verify payment session from Firestore, NOT Firebase Auth.
       // This is the only source of truth for payment verification.
@@ -62,7 +62,7 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage>
       );
 
       if (!isVerified) {
-        _blockPaymentSuccess('Email not verified for this payment session');
+        _blockPaymentSuccess('Payment OTP is not verified for this session');
         return;
       }
 
@@ -144,13 +144,13 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    Icons.mark_email_unread_outlined,
+                    Icons.lock_clock_outlined,
                     color: AppColors.error,
                     size: 64,
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   Text(
-                    'Email not verified yet',
+                    'Payment OTP not verified',
                     textAlign: TextAlign.center,
                     style: AppTextStyles.headingLarge.copyWith(
                       color: AppColors.backgroundDark,
@@ -158,7 +158,7 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage>
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'Please check your inbox and verify first.',
+                    'Please go back and complete OTP confirmation first.',
                     textAlign: TextAlign.center,
                     style: AppTextStyles.body.copyWith(
                       color: AppColors.textSecondary,

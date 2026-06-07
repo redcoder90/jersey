@@ -143,15 +143,17 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
+import 'otp_verification_screen.dart';
 import 'splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  runApp(const JerseyDripApp());
+  runApp(const ProviderScope(child: JerseyDripApp()));
 }
 
 class JerseyDripApp extends StatelessWidget {
@@ -164,6 +166,18 @@ class JerseyDripApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       home: const SplashScreen(),
+      onGenerateRoute: (settings) {
+        if (settings.name == OTPVerificationScreen.routeName) {
+          final args = settings.arguments;
+          if (args is OtpVerificationArgs) {
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => OTPVerificationScreen(args: args),
+            );
+          }
+        }
+        return null;
+      },
     );
   }
 }

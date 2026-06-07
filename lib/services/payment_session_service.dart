@@ -50,33 +50,27 @@ class PaymentSessionService {
     return session;
   }
 
-  /// Record that a payment verification email was requested for this session.
-  ///
-  /// This does not verify the session. A trusted backend, email-link handler,
-  /// or emulator/admin workflow must set status to "verified",
-  /// verificationCompleted to true, and verifiedAt for payment approval.
-  Future<PaymentSession> markVerificationEmailSent(String sessionId) async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      throw FirebaseAuthException(
-        code: 'no-current-user',
-        message: 'No authenticated user to send payment verification.',
-      );
-    }
-
+  Future<PaymentSession> markSessionVerified(String sessionId) async {
     final session = await _requireUserSession(sessionId);
-    if (session.status != 'pending_verification') {
-      return session;
+    if (session.isCompleted) {
+      throw FirebaseException(
+        plugin: 'payment_session_service',
+        message: 'Payment session is already completed.',
+      );
     }
 
     final now = DateTime.now();
     await _collection.doc(sessionId).update({
-      'email': user.email,
-      'emailSentAt': now.toIso8601String(),
-      'verificationCompleted': false,
+      'status': 'verified',
+      'verificationCompleted': true,
+      'verifiedAt': now.toIso8601String(),
     });
 
-    return session.copyWith(email: user.email, emailSentAt: now);
+    return session.copyWith(
+      status: 'verified',
+      verificationCompleted: true,
+      verifiedAt: now,
+    );
   }
 
   /// Retrieve a payment session by ID.
@@ -160,13 +154,6 @@ class PaymentSessionService {
       }
 
       var session = await getPaymentSession(sessionId);
-      if (session != null &&
-          !session.isVerified &&
-          !session.isCompleted &&
-          session.userId == user.uid) {
-        session = await _verifySessionFromCurrentAuthState(session);
-      }
-
       return session != null &&
           session.isVerified &&
           !session.isCompleted &&
@@ -178,39 +165,6 @@ class PaymentSessionService {
 
   CollectionReference<Map<String, dynamic>> get _collection {
     return _firestore.collection('payment_sessions');
-  }
-
-  Future<PaymentSession> _verifySessionFromCurrentAuthState(
-    PaymentSession session,
-  ) async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      return session;
-    }
-
-    await user.reload();
-    final refreshedUser = _auth.currentUser;
-    await refreshedUser?.getIdToken(true);
-
-    if (refreshedUser?.emailVerified != true ||
-        refreshedUser?.uid != session.userId ||
-        session.status != 'pending_verification' ||
-        session.emailSentAt == null) {
-      return session;
-    }
-
-    final now = DateTime.now();
-    await _collection.doc(session.sessionId).update({
-      'status': 'verified',
-      'verificationCompleted': true,
-      'verifiedAt': now.toIso8601String(),
-    });
-
-    return session.copyWith(
-      status: 'verified',
-      verificationCompleted: true,
-      verifiedAt: now,
-    );
   }
 
   Future<PaymentSession> _requireUserSession(String sessionId) async {

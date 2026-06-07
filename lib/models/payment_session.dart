@@ -36,7 +36,7 @@ class PaymentSession {
   /// Email address used for this payment session verification
   final String? email;
 
-  /// When the payment verification email was requested
+  /// When the payment OTP email was requested
   final DateTime? emailSentAt;
 
   /// Transaction-level completion flag for payment verification

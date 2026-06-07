@@ -19,21 +19,10 @@ service cloud.firestore {
         && !('completedAt' in request.resource.data);
     }
 
-    function marksEmailSentOnly() {
-      return ownsSession()
-        && resource.data.status == 'pending_verification'
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['email', 'emailSentAt', 'verificationCompleted'])
-        && request.resource.data.status == resource.data.status
-        && request.resource.data.verificationCompleted == false;
-    }
-
     function verifiesPendingSessionOnly() {
       return ownsSession()
-        && request.auth.token.email_verified == true
         && resource.data.status == 'pending_verification'
         && resource.data.verificationCompleted == false
-        && ('emailSentAt' in resource.data)
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['status', 'verificationCompleted', 'verifiedAt'])
         && request.resource.data.status == 'verified'
@@ -54,10 +43,42 @@ service cloud.firestore {
     match /payment_sessions/{sessionId} {
       allow create: if createsOwnPendingSession();
       allow read: if ownsSession();
-      allow update: if marksEmailSentOnly()
-        || verifiesPendingSessionOnly()
+      allow update: if verifiesPendingSessionOnly()
         || completesVerifiedSessionOnly();
       allow delete: if false;
+    }
+
+    match /otp_verifications/{otpId} {
+      function validOtpRecord() {
+        return request.resource.data.keys().hasOnly([
+            'email',
+            'otp',
+            'purpose',
+            'createdAt',
+            'expiresAt',
+            'attempts',
+            'verified',
+          ])
+          && request.resource.data.email is string
+          && request.resource.data.otp is string
+          && request.resource.data.otp.matches('^[0-9]{6}$')
+          && request.resource.data.purpose in ['signup', 'payment']
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.expiresAt is timestamp
+          && request.resource.data.attempts is int
+          && request.resource.data.attempts >= 0
+          && request.resource.data.attempts <= 5
+          && request.resource.data.verified is bool;
+      }
+
+      allow create: if validOtpRecord()
+        && request.resource.data.attempts == 0
+        && request.resource.data.verified == false;
+      allow read: if true;
+      allow update: if validOtpRecord()
+        && resource.data.email == request.resource.data.email
+        && resource.data.purpose == request.resource.data.purpose;
+      allow delete: if signedIn();
     }
 
     match /products/{productId} {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/exceptions/auth_exception_handler.dart';
 import 'core/theme/app_colors.dart';
@@ -10,19 +11,20 @@ import 'common/widgets/auth_card.dart';
 import 'widgets/auth_button.dart';
 import 'widgets/auth_header.dart';
 import 'widgets/auth_text_field.dart';
-import 'email_verification_screen.dart';
 import 'forgot_password_screen.dart';
 import 'home.dart';
+import 'otp_verification_screen.dart';
+import 'providers/auth_otp_controller.dart';
 import 'services/auth_service.dart';
 
-class AuthScreen extends StatefulWidget {
+class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
 
   @override
-  State<AuthScreen> createState() => _AuthScreenState();
+  ConsumerState<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> {
+class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
   final _authService = AuthService();
   final _nameController = TextEditingController();
@@ -63,22 +65,11 @@ class _AuthScreenState extends State<AuthScreen> {
     if (user == null) return;
 
     await _authService.reloadCurrentUser();
-    final verified = _authService.isEmailVerified;
     if (!mounted) return;
-
-    if (verified) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
-      return;
-    }
 
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(
-        builder: (_) => EmailVerificationScreen(userEmail: user.email ?? ''),
-      ),
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
     );
   }
 
@@ -131,26 +122,26 @@ class _AuthScreenState extends State<AuthScreen> {
       if (_isLogin) {
         await _authService.signIn(email, password);
         await _authService.reloadCurrentUser();
-
-        if (_authService.isEmailVerified) {
-          await _navigateToHome();
-        } else {
-          _showMessage(
-            'Please verify your email before continuing.',
-            Colors.orange,
-          );
-          await _navigateToVerification(email);
-        }
+        await _navigateToHome();
       } else {
-        await _authService.signUp(name, email, password);
-        _showMessage(
-          'Verification email sent. Check your inbox.',
-          Colors.green,
+        final verificationId = await ref
+            .read(authOtpControllerProvider.notifier)
+            .sendSignupOtp(email: email);
+        _showMessage('OTP sent. Check your inbox.', Colors.green);
+        await _navigateToOtp(
+          OtpVerificationArgs.signup(
+            email: email,
+            verificationId: verificationId,
+            name: name,
+            password: password,
+          ),
         );
-        await _navigateToVerification(email);
       }
     } catch (error) {
-      final message = error is Exception
+      final otpError = ref.read(authOtpControllerProvider).error;
+      final message = otpError != null && otpError.isNotEmpty
+          ? otpError
+          : error is Exception
           ? AuthExceptionHandler.getMessage(error)
           : 'Something went wrong. Please try again.';
       _showMessage(message, Colors.redAccent);
@@ -182,17 +173,7 @@ class _AuthScreenState extends State<AuthScreen> {
       final result = await _authService.signInWithGoogle();
       debugPrint('[AuthScreen] Google sign-in result: ${result.user?.email}');
       await _authService.reloadCurrentUser();
-
-      if (_authService.isEmailVerified) {
-        await _navigateToHome();
-      } else {
-        _showMessage(
-          'Please verify your email before continuing.',
-          Colors.orange,
-        );
-        final email = _authService.currentUser?.email ?? '';
-        await _navigateToVerification(email);
-      }
+      await _navigateToHome();
     } catch (error, stackTrace) {
       debugPrint('[AuthScreen] Google sign-in failed: $error');
       debugPrint(stackTrace.toString());
@@ -228,13 +209,12 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Future<void> _navigateToVerification(String email) async {
+  Future<void> _navigateToOtp(OtpVerificationArgs args) async {
     if (!mounted) return;
-    Navigator.pushReplacement(
+    Navigator.pushNamed(
       context,
-      MaterialPageRoute(
-        builder: (_) => EmailVerificationScreen(userEmail: email),
-      ),
+      OTPVerificationScreen.routeName,
+      arguments: args,
     );
   }
 
@@ -343,7 +323,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               ),
                               const SizedBox(height: AppSpacing.xl),
                               AuthButton(
-                                label: _isLogin ? 'Sign In' : 'Sign Up',
+                                label: _isLogin ? 'Sign In' : 'Continue',
                                 onPressed: _submit,
                                 isLoading: _isLoading,
                                 enabled: _isFormValid && !_isLoading,
