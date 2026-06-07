@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'order_setup_page.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_text_styles.dart';
+import 'models/cart_item.dart';
 import 'models/product.dart';
 import 'services/cart_service.dart';
 import 'services/wishlist_service.dart';
@@ -144,7 +146,27 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: ElevatedButton(
-                onPressed: () {},
+                onPressed: () {
+                  final item = CartItem(
+                    productId: product.id,
+                    name: product.name,
+                    price: product.discountedPrice.round(),
+                    imagePath: product.imagePath,
+                    quantity: 1,
+                    totalPrice: product.discountedPrice.round(),
+                  );
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => OrderSetupPage(
+                        items: [item],
+                        isBuyNow: true,
+                        sizes: _sizes,
+                      ),
+                    ),
+                  );
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.accent,
                   foregroundColor: Colors.white,

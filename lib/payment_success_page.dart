@@ -5,14 +5,20 @@ import 'package:flutter/material.dart';
 import 'models/checkout_session.dart';
 import 'order_receipt_page.dart';
 import 'services/order_service.dart';
+import 'services/payment_session_service.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_text_styles.dart';
 
 class PaymentSuccessPage extends StatefulWidget {
-  const PaymentSuccessPage({super.key, required this.result});
+  const PaymentSuccessPage({
+    super.key,
+    required this.result,
+    required this.paymentSessionId,
+  });
 
   final PaymentResult result;
+  final String paymentSessionId;
 
   @override
   State<PaymentSuccessPage> createState() => _PaymentSuccessPageState();
@@ -21,8 +27,11 @@ class PaymentSuccessPage extends StatefulWidget {
 class _PaymentSuccessPageState extends State<PaymentSuccessPage>
     with SingleTickerProviderStateMixin {
   final OrderService _orderService = OrderService();
+  final PaymentSessionService _sessionService = PaymentSessionService();
   late final AnimationController _controller;
   bool _creatingOrder = true;
+  bool _checkingVerification = true;
+  bool _verificationBlocked = false;
 
   @override
   void initState() {
@@ -30,14 +39,55 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 850),
-    )..forward();
-    unawaited(_createOrderAndContinue());
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(_verifyEmailThenCreateOrder());
+      }
+    });
   }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _verifyEmailThenCreateOrder() async {
+    try {
+      // CRITICAL: Verify payment session from Firestore, NOT Firebase Auth.
+      // This is the only source of truth for payment verification.
+      final isVerified = await _sessionService.isCurrentUserSessionVerified(
+        widget.paymentSessionId,
+      );
+
+      if (!isVerified) {
+        _blockPaymentSuccess('Email not verified for this payment session');
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _checkingVerification = false;
+      });
+      _controller.forward();
+      await _createOrderAndContinue();
+    } catch (error) {
+      if (!mounted) return;
+      _blockPaymentSuccess('Unable to verify payment session');
+    }
+  }
+
+  void _blockPaymentSuccess(String message) {
+    if (!mounted) return;
+    setState(() {
+      _checkingVerification = false;
+      _creatingOrder = false;
+      _verificationBlocked = true;
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _createOrderAndContinue() async {
@@ -47,6 +97,10 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage>
         paymentMethod: widget.result.paymentMethod,
         transactionId: widget.result.transactionId,
       );
+
+      // Mark payment session as completed after order is created
+      await _sessionService.markSessionCompleted(widget.paymentSessionId);
+
       await Future<void>.delayed(const Duration(milliseconds: 1200));
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -66,6 +120,62 @@ class _PaymentSuccessPageState extends State<PaymentSuccessPage>
 
   @override
   Widget build(BuildContext context) {
+    if (_checkingVerification) {
+      return Scaffold(
+        backgroundColor: AppColors.backgroundLight,
+        body: const SafeArea(child: Center(child: CircularProgressIndicator())),
+      );
+    }
+
+    if (_verificationBlocked) {
+      return Scaffold(
+        backgroundColor: AppColors.backgroundLight,
+        appBar: AppBar(
+          backgroundColor: AppColors.backgroundLight,
+          elevation: 0,
+          foregroundColor: AppColors.backgroundDark,
+        ),
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.mark_email_unread_outlined,
+                    color: AppColors.error,
+                    size: 64,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    'Email not verified yet',
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.headingLarge.copyWith(
+                      color: AppColors.backgroundDark,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Please check your inbox and verify first.',
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  ElevatedButton(
+                    onPressed: () => Navigator.maybePop(context),
+                    child: const Text('Back to Verification'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.backgroundLight,
       body: SafeArea(

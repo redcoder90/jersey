@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'checkout_page.dart';
+import 'order_setup_page.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_text_styles.dart';
@@ -77,7 +77,9 @@ class _CartPageState extends State<CartPage> {
 
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => CheckoutPage(items: selectedItems)),
+      MaterialPageRoute(
+        builder: (_) => OrderSetupPage(items: selectedItems, isBuyNow: false),
+      ),
     );
   }
 

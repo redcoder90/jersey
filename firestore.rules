@@ -1,0 +1,73 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownsSession() {
+      return signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    function createsOwnPendingSession() {
+      return signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending_verification'
+        && request.resource.data.verificationCompleted == false
+        && !('verifiedAt' in request.resource.data)
+        && !('completedAt' in request.resource.data);
+    }
+
+    function marksEmailSentOnly() {
+      return ownsSession()
+        && resource.data.status == 'pending_verification'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['email', 'emailSentAt', 'verificationCompleted'])
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.verificationCompleted == false;
+    }
+
+    function completesVerifiedSessionOnly() {
+      return ownsSession()
+        && resource.data.status == 'verified'
+        && resource.data.verificationCompleted == true
+        && ('verifiedAt' in resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'completedAt'])
+        && request.resource.data.status == 'completed';
+    }
+
+    match /payment_sessions/{sessionId} {
+      allow create: if createsOwnPendingSession();
+      allow read: if ownsSession();
+      allow update: if marksEmailSentOnly() || completesVerifiedSessionOnly();
+      allow delete: if false;
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
+
+    match /users/{userId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+
+      match /cart/{itemId} {
+        allow read, write: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /wishlist/{itemId} {
+        allow read, write: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /orders/{orderId} {
+        allow read, write: if signedIn() && request.auth.uid == userId;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
