@@ -2,7 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CartItem {
   const CartItem({
+    required this.id,
     required this.productId,
+    required this.size,
     required this.name,
     required this.price,
     required this.imagePath,
@@ -10,7 +12,9 @@ class CartItem {
     required this.totalPrice,
   });
 
+  final String id;
   final String productId;
+  final String size;
   final String name;
   final int price;
   final String imagePath;
@@ -26,12 +30,32 @@ class CartItem {
     final quantity = _readInt(data['quantity'], fallback: 1);
 
     return CartItem(
+      id: document.id,
       productId: productId,
+      size: _readString(data['size']),
       name: _readString(data['name'], fallback: 'Cart item'),
       price: price,
       imagePath: _readString(data['imagePath']),
       quantity: quantity,
       totalPrice: _readInt(data['totalPrice'], fallback: price * quantity),
+    );
+  }
+
+  CartItem copyWith({
+    int? price,
+    int? quantity,
+    int? totalPrice,
+    String? size,
+  }) {
+    return CartItem(
+      id: id,
+      productId: productId,
+      size: size ?? this.size,
+      name: name,
+      price: price ?? this.price,
+      imagePath: imagePath,
+      quantity: quantity ?? this.quantity,
+      totalPrice: totalPrice ?? this.totalPrice,
     );
   }
 

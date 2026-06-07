@@ -31,6 +31,7 @@ class _WishlistPageState extends State<WishlistPage> {
     try {
       await _cartService.addItem(
         productId: item.productId,
+        size: 'One Size',
         name: item.name,
         price: item.price,
         imagePath: item.imagePath,
@@ -83,7 +84,12 @@ class _WishlistPageState extends State<WishlistPage> {
           brand: 'Sports Brand',
           imagePath: item.imagePath,
           stockQuantity: 5,
-          sizes: const ['S', 'M', 'L', 'XL'],
+          sizes: {
+            'S': SizeVariant(price: item.price, stock: 5),
+            'M': SizeVariant(price: item.price, stock: 5),
+            'L': SizeVariant(price: item.price, stock: 5),
+            'XL': SizeVariant(price: item.price, stock: 5),
+          },
           featured: false,
           createdAt: DateTime.now(),
         );

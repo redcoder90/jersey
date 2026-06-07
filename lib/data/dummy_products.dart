@@ -1,5 +1,15 @@
 import '../models/product.dart';
 
+Map<String, SizeVariant> _variants(
+  Iterable<String> sizes, {
+  required int price,
+  required int stock,
+}) {
+  return {
+    for (final size in sizes) size: SizeVariant(price: price, stock: stock),
+  };
+}
+
 final List<Product> dummyProducts = [
   Product(
     id: 'RM001',
@@ -11,7 +21,7 @@ final List<Product> dummyProducts = [
     brand: 'Adidas',
     imagePath: 'product_images/jerseys/RM.jpg',
     stockQuantity: 10,
-    sizes: ['S', 'M', 'L', 'XL'],
+    sizes: _variants(['S', 'M', 'L', 'XL'], price: 1500, stock: 10),
     featured: true,
     createdAt: DateTime.now(),
   ),
@@ -25,7 +35,7 @@ final List<Product> dummyProducts = [
     brand: 'Nike',
     imagePath: 'product_images/jerseys/livjpg.jpg',
     stockQuantity: 8,
-    sizes: ['S', 'M', 'L', 'XL'],
+    sizes: _variants(['S', 'M', 'L', 'XL'], price: 1600, stock: 8),
     featured: true,
     createdAt: DateTime.now(),
   ),
@@ -39,7 +49,7 @@ final List<Product> dummyProducts = [
     brand: 'Nike',
     imagePath: 'product_images/jerseys/psg.jpeg',
     stockQuantity: 7,
-    sizes: ['S', 'M', 'L', 'XL'],
+    sizes: _variants(['S', 'M', 'L', 'XL'], price: 1700, stock: 7),
     featured: true,
     createdAt: DateTime.now(),
   ),
@@ -53,7 +63,7 @@ final List<Product> dummyProducts = [
     brand: 'Adidas',
     imagePath: 'product_images/socks/adidassocks.webp',
     stockQuantity: 24,
-    sizes: ['S', 'M', 'L'],
+    sizes: _variants(['S', 'M', 'L'], price: 350, stock: 24),
     featured: false,
     createdAt: DateTime.now(),
   ),
@@ -67,7 +77,7 @@ final List<Product> dummyProducts = [
     brand: 'Adidas',
     imagePath: 'product_images/socks/adidassocks1.webp',
     stockQuantity: 18,
-    sizes: ['S', 'M', 'L'],
+    sizes: _variants(['S', 'M', 'L'], price: 420, stock: 18),
     featured: false,
     createdAt: DateTime.now(),
   ),
@@ -81,7 +91,7 @@ final List<Product> dummyProducts = [
     brand: 'Nike',
     imagePath: 'product_images/boots/Nikeairzoom.webp',
     stockQuantity: 9,
-    sizes: ['7', '8', '9', '10', '11'],
+    sizes: _variants(['7', '8', '9', '10', '11'], price: 2900, stock: 9),
     featured: true,
     createdAt: DateTime.now(),
   ),
@@ -95,7 +105,7 @@ final List<Product> dummyProducts = [
     brand: 'Adidas',
     imagePath: 'product_images/boots/adidaspredator.jpg',
     stockQuantity: 6,
-    sizes: ['7', '8', '9', '10', '11'],
+    sizes: _variants(['7', '8', '9', '10', '11'], price: 3100, stock: 6),
     featured: true,
     createdAt: DateTime.now(),
   ),
@@ -109,7 +119,7 @@ final List<Product> dummyProducts = [
     brand: 'Adidas',
     imagePath: 'product_images/accessories/shinguard.jpg',
     stockQuantity: 15,
-    sizes: ['One Size'],
+    sizes: _variants(['One Size'], price: 600, stock: 15),
     featured: false,
     createdAt: DateTime.now(),
   ),

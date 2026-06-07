@@ -5,6 +5,7 @@ import 'core/theme/app_colors.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_text_styles.dart';
 import 'models/cart_item.dart';
+import 'models/product.dart';
 import 'services/cart_service.dart';
 
 class CartPage extends StatefulWidget {
@@ -17,6 +18,7 @@ class CartPage extends StatefulWidget {
 class _CartPageState extends State<CartPage> {
   final CartService _cartService = CartService();
   final Set<String> _selectedProductIds = {};
+  final Set<String> _sizeRepairQueue = {};
   late final Stream<List<CartItem>> _cartStream = _cartService.cartStream();
 
   String _formatPrice(int amount) {
@@ -25,17 +27,34 @@ class _CartPageState extends State<CartPage> {
 
   Future<void> _updateQuantity(CartItem item, int quantity) async {
     try {
-      await _cartService.updateQuantity(item.productId, quantity);
+      await _cartService.updateQuantity(
+        item.productId,
+        quantity,
+        size: item.size,
+      );
     } catch (_) {
       if (!mounted) return;
       _showMessage('Unable to update cart item');
     }
   }
 
+  Future<void> _updateSize(CartItem item, String size) async {
+    try {
+      await _cartService.updateSize(item, size);
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage(
+        error.toString().replaceFirst('Bad state: ', '').trim().isEmpty
+            ? 'Unable to update size'
+            : error.toString().replaceFirst('Bad state: ', ''),
+      );
+    }
+  }
+
   Future<void> _removeItem(CartItem item) async {
     try {
-      _selectedProductIds.remove(item.productId);
-      await _cartService.removeItem(item.productId);
+      _selectedProductIds.remove(item.id);
+      await _cartService.removeItem(item.productId, size: item.size);
     } catch (_) {
       if (!mounted) return;
       _showMessage('Unable to remove cart item');
@@ -43,7 +62,7 @@ class _CartPageState extends State<CartPage> {
   }
 
   void _syncSelectionWithCart(List<CartItem> items) {
-    final cartProductIds = items.map((item) => item.productId).toSet();
+    final cartProductIds = items.map((item) => item.id).toSet();
     _selectedProductIds.removeWhere(
       (productId) => !cartProductIds.contains(productId),
     );
@@ -62,7 +81,7 @@ class _CartPageState extends State<CartPage> {
   void _toggleSelectAll(List<CartItem> items, bool selected) {
     setState(() {
       if (selected) {
-        _selectedProductIds.addAll(items.map((item) => item.productId));
+        _selectedProductIds.addAll(items.map((item) => item.id));
       } else {
         _selectedProductIds.clear();
       }
@@ -81,6 +100,31 @@ class _CartPageState extends State<CartPage> {
         builder: (_) => OrderSetupPage(items: selectedItems, isBuyNow: false),
       ),
     );
+  }
+
+  String _effectiveCartSize(CartItem item, Map<String, SizeVariant> sizes) {
+    if (sizes.isEmpty) return item.size;
+    if (sizes.containsKey(item.size)) return item.size;
+    return getSmallestAvailableSize(sizes);
+  }
+
+  void _repairLegacyCartSize(CartItem item, String size) {
+    if (size.isEmpty ||
+        item.size == size ||
+        _sizeRepairQueue.contains(item.id)) {
+      return;
+    }
+
+    _sizeRepairQueue.add(item.id);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await _cartService.updateSize(item, size);
+      } catch (_) {
+        // Keep the cart usable even if an old item cannot be repaired.
+      } finally {
+        _sizeRepairQueue.remove(item.id);
+      }
+    });
   }
 
   void _showMessage(String message) {
@@ -113,7 +157,7 @@ class _CartPageState extends State<CartPage> {
           _syncSelectionWithCart(items);
 
           final selectedItems = items
-              .where((item) => _selectedProductIds.contains(item.productId))
+              .where((item) => _selectedProductIds.contains(item.id))
               .toList(growable: false);
           final selectedTotal = selectedItems.fold<int>(
             0,
@@ -154,25 +198,53 @@ class _CartPageState extends State<CartPage> {
                             const SizedBox(height: AppSpacing.md),
                         itemBuilder: (context, index) {
                           final item = items[index];
-                          return _CartItemTile(
-                            item: item,
-                            selected: _selectedProductIds.contains(
+                          return StreamBuilder<Map<String, SizeVariant>>(
+                            stream: _cartService.productSizesStream(
                               item.productId,
                             ),
-                            priceText: _formatPrice(item.price),
-                            subtotalText: _formatPrice(item.totalPrice),
-                            onSelectedChanged: (selected) =>
-                                _toggleItemSelection(
-                                  item.productId,
-                                  selected ?? false,
-                                ),
-                            onDecrease: item.quantity == 1
-                                ? () => _removeItem(item)
-                                : () =>
-                                      _updateQuantity(item, item.quantity - 1),
-                            onIncrease: () =>
-                                _updateQuantity(item, item.quantity + 1),
-                            onDelete: () => _removeItem(item),
+                            builder: (context, sizeSnapshot) {
+                              final sizes =
+                                  sizeSnapshot.data ??
+                                  const <String, SizeVariant>{};
+                              final effectiveSize = _effectiveCartSize(
+                                item,
+                                sizes,
+                              );
+                              if (effectiveSize != item.size) {
+                                _repairLegacyCartSize(item, effectiveSize);
+                              }
+                              final selectedStock = sizes[effectiveSize]?.stock;
+                              return _CartItemTile(
+                                item: item.copyWith(size: effectiveSize),
+                                selected: _selectedProductIds.contains(item.id),
+                                sizes: sizes,
+                                stock: selectedStock,
+                                priceText: _formatPrice(item.price),
+                                subtotalText: _formatPrice(item.totalPrice),
+                                onSelectedChanged: (selected) =>
+                                    _toggleItemSelection(
+                                      item.id,
+                                      selected ?? false,
+                                    ),
+                                onSizeChanged: (size) =>
+                                    _updateSize(item, size),
+                                onDecrease: item.quantity == 1
+                                    ? () => _removeItem(item)
+                                    : () => _updateQuantity(
+                                        item,
+                                        item.quantity - 1,
+                                      ),
+                                onIncrease:
+                                    selectedStock != null &&
+                                        item.quantity >= selectedStock
+                                    ? null
+                                    : () => _updateQuantity(
+                                        item,
+                                        item.quantity + 1,
+                                      ),
+                                onDelete: () => _removeItem(item),
+                              );
+                            },
                           );
                         },
                       ),
@@ -260,9 +332,12 @@ class _CartItemTile extends StatelessWidget {
   const _CartItemTile({
     required this.item,
     required this.selected,
+    required this.sizes,
+    required this.stock,
     required this.priceText,
     required this.subtotalText,
     required this.onSelectedChanged,
+    required this.onSizeChanged,
     required this.onDecrease,
     required this.onIncrease,
     required this.onDelete,
@@ -270,15 +345,26 @@ class _CartItemTile extends StatelessWidget {
 
   final CartItem item;
   final bool selected;
+  final Map<String, SizeVariant> sizes;
+  final int? stock;
   final String priceText;
   final String subtotalText;
   final ValueChanged<bool?> onSelectedChanged;
+  final ValueChanged<String> onSizeChanged;
   final VoidCallback? onDecrease;
-  final VoidCallback onIncrease;
+  final VoidCallback? onIncrease;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
+    final sizeOptions = sortedSizeKeys(sizes);
+    final canEditSize = sizeOptions.isNotEmpty;
+    final stockText = stock == null
+        ? 'Checking stock'
+        : stock == 0
+        ? 'Out of stock'
+        : 'Only $stock left in stock';
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.sm),
       decoration: BoxDecoration(
@@ -360,6 +446,42 @@ class _CartItemTile extends StatelessWidget {
                     color: AppColors.textSecondary,
                   ),
                 ),
+                if (item.size.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.xxs),
+                  Row(
+                    children: [
+                      Text(
+                        'Size',
+                        style: AppTextStyles.label.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      if (canEditSize)
+                        _CartSizeDropdown(
+                          value: item.size,
+                          sizes: sizes,
+                          onChanged: onSizeChanged,
+                        )
+                      else
+                        Text(
+                          item.size,
+                          style: AppTextStyles.label.copyWith(
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.xxs),
+                Text(
+                  stockText,
+                  style: AppTextStyles.label.copyWith(
+                    color: stock == 0 ? AppColors.error : AppColors.success,
+                    fontSize: 12,
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Subtotal $subtotalText',
@@ -383,6 +505,58 @@ class _CartItemTile extends StatelessWidget {
   }
 }
 
+class _CartSizeDropdown extends StatelessWidget {
+  const _CartSizeDropdown({
+    required this.value,
+    required this.sizes,
+    required this.onChanged,
+  });
+
+  final String value;
+  final Map<String, SizeVariant> sizes;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final options = sortedSizeKeys(sizes);
+    final dropdownValue = options.contains(value) ? value : null;
+
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        value: dropdownValue,
+        isDense: true,
+        hint: Text(
+          value,
+          style: AppTextStyles.label.copyWith(
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        items: options.map((size) {
+          final stock = sizes[size]?.stock ?? 0;
+          return DropdownMenuItem<String>(
+            value: size,
+            enabled: stock > 0,
+            child: Text(
+              stock > 0 ? size : '$size - Out',
+              style: AppTextStyles.label.copyWith(
+                color: stock > 0
+                    ? AppColors.backgroundDark
+                    : AppColors.textSecondary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          );
+        }).toList(),
+        onChanged: (size) {
+          if (size == null || size == value) return;
+          onChanged(size);
+        },
+      ),
+    );
+  }
+}
+
 class _QuantityControls extends StatelessWidget {
   const _QuantityControls({
     required this.quantity,
@@ -392,7 +566,7 @@ class _QuantityControls extends StatelessWidget {
 
   final int quantity;
   final VoidCallback? onDecrease;
-  final VoidCallback onIncrease;
+  final VoidCallback? onIncrease;
 
   @override
   Widget build(BuildContext context) {

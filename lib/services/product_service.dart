@@ -50,6 +50,21 @@ class ProductService {
   ) {
     final data = document.data();
     final price = _readDouble(data['price']);
+    final stockQuantity = _readInt(
+      _readFirstValue(data, const [
+        'quantity',
+        'stockQuantity',
+        'stockquantity',
+        'stock_quantity',
+        'stock',
+      ]),
+    );
+    final sizes = _readSizeVariants(
+      data['sizes'],
+      fallbackPrice: price.round(),
+      fallbackStock: stockQuantity,
+      category: _normalizeCategory(data['category']),
+    );
     final originalPrice = _readNullableDouble(
       _readFirstValue(data, const [
         'originalPrice',
@@ -89,16 +104,8 @@ class ProductService {
       category: _normalizeCategory(data['category']),
       brand: _readString(data['brand']),
       imagePath: imagePath,
-      stockQuantity: _readInt(
-        _readFirstValue(data, const [
-          'quantity',
-          'stockQuantity',
-          'stockquantity',
-          'stock_quantity',
-          'stock',
-        ]),
-      ),
-      sizes: _readStringList(data['sizes']),
+      stockQuantity: stockQuantity,
+      sizes: sizes,
       featured: data['featured'] == true,
       createdAt: _readDateTime(data['createdAt']),
     );
@@ -164,15 +171,66 @@ class ProductService {
     return null;
   }
 
-  List<String> _readStringList(Object? value) {
+  Map<String, SizeVariant> _readSizeVariants(
+    Object? value, {
+    required int fallbackPrice,
+    required int fallbackStock,
+    required String category,
+  }) {
+    if (value is Map) {
+      final variants = <String, SizeVariant>{};
+      for (final entry in value.entries) {
+        final size = entry.key.toString().trim();
+        if (size.isEmpty) continue;
+
+        final rawVariant = entry.value;
+        if (rawVariant is Map) {
+          variants[size] = SizeVariant(
+            price: _readInt(rawVariant['price'], fallback: fallbackPrice),
+            stock: _readInt(rawVariant['stock'], fallback: fallbackStock),
+          );
+        }
+      }
+      if (variants.isNotEmpty) return variants;
+    }
+
     if (value is Iterable) {
-      return value
+      final labels = value
           .whereType<String>()
           .map((size) => size.trim())
           .where((size) => size.isNotEmpty)
           .toList();
+      if (labels.isNotEmpty) {
+        return {
+          for (final size in labels)
+            size: SizeVariant(price: fallbackPrice, stock: fallbackStock),
+        };
+      }
     }
-    return const [];
+
+    return _defaultSizeVariantsForCategory(
+      category,
+      price: fallbackPrice,
+      stock: fallbackStock,
+    );
+  }
+
+  Map<String, SizeVariant> _defaultSizeVariantsForCategory(
+    String category, {
+    required int price,
+    required int stock,
+  }) {
+    final normalizedCategory = category.toLowerCase();
+    final labels = switch (normalizedCategory) {
+      'jersey' => const ['S', 'M', 'L', 'XL'],
+      'socks' => const ['S', 'M', 'L'],
+      'trainers' || 'boots' || 'shoes' => const ['40', '41', '42', '43', '44'],
+      _ => const ['One Size'],
+    };
+
+    return {
+      for (final size in labels) size: SizeVariant(price: price, stock: stock),
+    };
   }
 
   DateTime _readDateTime(Object? value) {

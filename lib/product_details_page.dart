@@ -22,20 +22,26 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   final CartService _cartService = CartService();
   final WishlistService _wishlistService = WishlistService();
 
-  late final List<String> _sizes = widget.product.sizes.isEmpty
-      ? const ['S', 'M', 'L', 'XL']
-      : widget.product.sizes;
   late final Stream<Set<String>> _wishlistProductIdsStream = _wishlistService
       .wishlistProductIdsStream();
 
-  late String _selectedSize = _sizes.first;
+  late String _selectedSize = _initialSelectedSize();
+  int _buyNowQuantity = 1;
 
   Product get product => widget.product;
 
-  int get _selectedSizeStock {
-    final index = _sizes.indexOf(_selectedSize);
-    final simulatedStock = product.stockQuantity - (index * 2);
-    return simulatedStock < 1 ? 1 : simulatedStock;
+  SizeVariant get _selectedVariant =>
+      product.variantForSize(_selectedSize) ?? product.defaultVariant;
+
+  int get _selectedSizePrice => _selectedVariant.price;
+
+  int get _selectedSizeStock => _selectedVariant.stock;
+
+  bool get _selectedSizeAvailable => _selectedSizeStock > 0;
+
+  String _initialSelectedSize() {
+    final defaultSize = product.defaultSize;
+    return defaultSize.isNotEmpty ? defaultSize : 'One Size';
   }
 
   String _formatPrice(double amount) {
@@ -51,14 +57,33 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   }
 
   void _selectSize(String size) {
+    final variant = product.variantForSize(size);
+    final stock = variant?.stock ?? 0;
+    if (stock <= 0) {
+      _showMessage('Selected size is out of stock');
+      return;
+    }
+
     setState(() {
       _selectedSize = size;
+      _buyNowQuantity = _buyNowQuantity.clamp(1, stock).toInt();
     });
   }
 
   Future<void> _addToCart() async {
+    if (!_selectedSizeAvailable) {
+      _showMessage('Selected size is out of stock');
+      return;
+    }
+
     try {
-      await _cartService.addProduct(product);
+      await _cartService.addItem(
+        productId: product.id,
+        size: _selectedSize,
+        name: product.name,
+        price: _selectedSizePrice,
+        imagePath: product.imagePath,
+      );
       if (!mounted) return;
       _showMessage('${product.name} added to cart');
     } catch (_) {
@@ -81,6 +106,45 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       SnackBar(
         content: Text(message),
         backgroundColor: AppColors.backgroundDark,
+      ),
+    );
+  }
+
+  void _updateBuyNowQuantity(int delta) {
+    final nextQuantity = _buyNowQuantity + delta;
+    if (nextQuantity < 1 || nextQuantity > _selectedSizeStock) return;
+
+    setState(() {
+      _buyNowQuantity = nextQuantity;
+    });
+  }
+
+  void _buyNow() {
+    if (!_selectedSizeAvailable) {
+      _showMessage('Selected size is out of stock');
+      return;
+    }
+    if (_buyNowQuantity > _selectedSizeStock) {
+      _showMessage('Only $_selectedSizeStock left in stock');
+      return;
+    }
+
+    final item = CartItem(
+      id: product.id,
+      productId: product.id,
+      size: _selectedSize,
+      name: product.name,
+      price: _selectedSizePrice,
+      imagePath: product.imagePath,
+      quantity: _buyNowQuantity,
+      totalPrice: _selectedSizePrice * _buyNowQuantity,
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            OrderSetupPage(items: [item], isBuyNow: true, sizes: product.sizes),
       ),
     );
   }
@@ -125,9 +189,10 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed: _addToCart,
+                onPressed: _selectedSizeAvailable ? _addToCart : null,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.backgroundDark,
+                  disabledForegroundColor: AppColors.textSecondary,
                   side: const BorderSide(color: AppColors.border),
                   padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
                   shape: RoundedRectangleBorder(
@@ -146,27 +211,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: ElevatedButton(
-                onPressed: () {
-                  final item = CartItem(
-                    productId: product.id,
-                    name: product.name,
-                    price: product.discountedPrice.round(),
-                    imagePath: product.imagePath,
-                    quantity: 1,
-                    totalPrice: product.discountedPrice.round(),
-                  );
-
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => OrderSetupPage(
-                        items: [item],
-                        isBuyNow: true,
-                        sizes: _sizes,
-                      ),
-                    ),
-                  );
-                },
+                onPressed: _selectedSizeAvailable ? _buyNow : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.accent,
                   foregroundColor: Colors.white,
@@ -233,13 +278,13 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        _formatPrice(product.discountedPrice),
+                        _formatPrice(_selectedSizePrice.toDouble()),
                         style: AppTextStyles.headingMedium.copyWith(
                           color: AppColors.backgroundDark,
                           fontSize: 24,
                         ),
                       ),
-                      if (product.discountedPrice < product.price) ...[
+                      if (_selectedSizePrice < product.price) ...[
                         const SizedBox(height: AppSpacing.xs),
                         Text(
                           _formatPrice(product.price),
@@ -269,40 +314,41 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
-                children: _sizes.map((size) {
-                  final selected = size == _selectedSize;
-
-                  return ChoiceChip(
-                    label: Text(size),
-                    selected: selected,
-                    showCheckmark: false,
-                    onSelected: (_) => _selectSize(size),
-                    selectedColor: AppColors.accent,
-                    backgroundColor: AppColors.surface,
-                    side: BorderSide(
-                      color: selected ? AppColors.accent : AppColors.border,
-                    ),
-                    labelStyle: AppTextStyles.label.copyWith(
-                      color: selected ? Colors.white : AppColors.backgroundDark,
-                      fontWeight: FontWeight.w800,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm,
-                      vertical: AppSpacing.xs,
-                    ),
-                  );
-                }).toList(),
+              _ProductSizeDropdown(
+                value: _selectedSize,
+                sizes: product.sizes,
+                onChanged: _selectSize,
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'Only $_selectedSizeStock left in stock',
-                style: AppTextStyles.label.copyWith(color: AppColors.success),
+                _selectedSizeStock == 0
+                    ? 'Out of stock'
+                    : 'Only $_selectedSizeStock left in stock',
+                style: AppTextStyles.label.copyWith(
+                  color: _selectedSizeStock == 0
+                      ? AppColors.error
+                      : AppColors.success,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'Quantity',
+                style: AppTextStyles.label.copyWith(
+                  color: AppColors.backgroundDark,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _QuantitySelector(
+                quantity: _buyNowQuantity,
+                onDecrease: _buyNowQuantity > 1
+                    ? () => _updateBuyNowQuantity(-1)
+                    : null,
+                onIncrease:
+                    _selectedSizeAvailable &&
+                        _buyNowQuantity < _selectedSizeStock
+                    ? () => _updateBuyNowQuantity(1)
+                    : null,
               ),
               const SizedBox(height: AppSpacing.xl),
               Text(
@@ -398,6 +444,127 @@ class _ProductImageSection extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ProductSizeDropdown extends StatelessWidget {
+  const _ProductSizeDropdown({
+    required this.value,
+    required this.sizes,
+    required this.onChanged,
+  });
+
+  final String value;
+  final Map<String, SizeVariant> sizes;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final options = sortedSizeKeys(sizes);
+    final dropdownValue = options.contains(value) ? value : null;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: dropdownValue,
+            isExpanded: true,
+            hint: Text(
+              'Select size',
+              style: AppTextStyles.label.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            items: options.map((size) {
+              final stock = sizes[size]?.stock ?? 0;
+              return DropdownMenuItem<String>(
+                value: size,
+                enabled: stock > 0,
+                child: Text(
+                  stock > 0 ? size : '$size - Out of stock',
+                  style: AppTextStyles.label.copyWith(
+                    color: stock > 0
+                        ? AppColors.backgroundDark
+                        : AppColors.textSecondary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              );
+            }).toList(),
+            onChanged: (size) {
+              if (size == null || size == value) return;
+              onChanged(size);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuantitySelector extends StatelessWidget {
+  const _QuantitySelector({
+    required this.quantity,
+    required this.onDecrease,
+    required this.onIncrease,
+  });
+
+  final int quantity;
+  final VoidCallback? onDecrease;
+  final VoidCallback? onIncrease;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _QuantityButton(icon: Icons.remove, onPressed: onDecrease),
+        SizedBox(
+          width: 48,
+          child: Text(
+            '$quantity',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.label.copyWith(
+              color: AppColors.backgroundDark,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        _QuantityButton(icon: Icons.add, onPressed: onIncrease),
+      ],
+    );
+  }
+}
+
+class _QuantityButton extends StatelessWidget {
+  const _QuantityButton({required this.icon, required this.onPressed});
+
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 38,
+      height: 38,
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+        padding: EdgeInsets.zero,
+        style: IconButton.styleFrom(
+          backgroundColor: AppColors.surface,
+          disabledBackgroundColor: AppColors.backgroundLight,
+          foregroundColor: AppColors.backgroundDark,
+          disabledForegroundColor: AppColors.textSecondary,
+        ),
       ),
     );
   }

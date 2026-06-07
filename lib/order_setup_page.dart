@@ -7,6 +7,8 @@ import 'core/theme/app_colors.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_text_styles.dart';
 import 'models/cart_item.dart';
+import 'models/product.dart';
+import 'services/cart_service.dart';
 
 class OrderSetupPage extends StatefulWidget {
   const OrderSetupPage({
@@ -18,7 +20,7 @@ class OrderSetupPage extends StatefulWidget {
 
   final List<CartItem> items;
   final bool isBuyNow;
-  final List<String>? sizes;
+  final Map<String, SizeVariant>? sizes;
 
   @override
   State<OrderSetupPage> createState() => _OrderSetupPageState();
@@ -26,6 +28,7 @@ class OrderSetupPage extends StatefulWidget {
 
 class _OrderSetupPageState extends State<OrderSetupPage> {
   final _addressController = TextEditingController();
+  final _cartService = CartService();
   bool _isLoadingAddress = true;
   String _selectedSize = 'M';
 
@@ -36,7 +39,15 @@ class _OrderSetupPageState extends State<OrderSetupPage> {
   void initState() {
     super.initState();
     _itemsState = widget.items.map((item) => item).toList(growable: true);
-    _selectedSize = widget.sizes?.first ?? 'M';
+    final firstItemSize = widget.items.isEmpty ? '' : widget.items.first.size;
+    final defaultSize = widget.sizes == null
+        ? ''
+        : getSmallestAvailableSize(widget.sizes!);
+    _selectedSize = firstItemSize.isNotEmpty
+        ? firstItemSize
+        : defaultSize.isNotEmpty
+        ? defaultSize
+        : 'M';
     _loadSavedAddress();
   }
 
@@ -84,13 +95,11 @@ class _OrderSetupPageState extends State<OrderSetupPage> {
     final item = _itemsState[index];
     final newQuantity = item.quantity + delta;
     if (newQuantity < 1) return;
+    final stockLimit = _stockLimitForItem(item);
+    if (stockLimit != null && newQuantity > stockLimit) return;
 
     setState(() {
-      _itemsState[index] = CartItem(
-        productId: item.productId,
-        name: item.name,
-        price: item.price,
-        imagePath: item.imagePath,
+      _itemsState[index] = item.copyWith(
         quantity: newQuantity,
         totalPrice: item.price * newQuantity,
       );
@@ -98,15 +107,45 @@ class _OrderSetupPageState extends State<OrderSetupPage> {
   }
 
   void _selectSize(String size) {
+    final variant = widget.sizes?[size];
+    if (variant == null || _itemsState.isEmpty) return;
+    if (variant.stock <= 0) {
+      _showMessage('Selected size is out of stock');
+      return;
+    }
+
+    final item = _itemsState.first;
+    final quantity = item.quantity > variant.stock
+        ? variant.stock
+        : item.quantity;
+
     setState(() {
       _selectedSize = size;
+      _itemsState[0] = item.copyWith(
+        size: size,
+        price: variant.price,
+        quantity: quantity < 1 ? 1 : quantity,
+        totalPrice: variant.price * (quantity < 1 ? 1 : quantity),
+      );
     });
   }
 
-  void _proceedToCheckout() {
+  Future<void> _proceedToCheckout() async {
     final address = _addressController.text.trim();
     if (address.isEmpty) {
       _showMessage('Please enter a delivery address');
+      return;
+    }
+    if (widget.isBuyNow && _itemsState.first.size.isEmpty) {
+      _showMessage('Please select a size');
+      return;
+    }
+
+    try {
+      await _cartService.validateItemsInStock(_itemsState);
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage(error.toString().replaceFirst('Bad state: ', ''));
       return;
     }
 
@@ -126,7 +165,8 @@ class _OrderSetupPageState extends State<OrderSetupPage> {
   }
 
   Widget _buildSizeSection() {
-    final sizes = widget.sizes ?? const ['S', 'M', 'L', 'XL'];
+    final sizes = widget.sizes ?? const <String, SizeVariant>{};
+    if (sizes.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -139,24 +179,19 @@ class _OrderSetupPageState extends State<OrderSetupPage> {
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
-        Wrap(
-          spacing: AppSpacing.sm,
-          runSpacing: AppSpacing.sm,
-          children: sizes.map((size) {
-            final selected = size == _selectedSize;
-            return ChoiceChip(
-              label: Text(size),
-              selected: selected,
-              showCheckmark: false,
-              selectedColor: AppColors.accent,
-              backgroundColor: AppColors.surface,
-              labelStyle: AppTextStyles.body.copyWith(
-                color: selected ? Colors.white : AppColors.textPrimary,
-                fontWeight: FontWeight.w700,
-              ),
-              onSelected: (_) => _selectSize(size),
-            );
-          }).toList(),
+        _BuyNowSizeDropdown(
+          value: _selectedSize,
+          sizes: sizes,
+          onChanged: _selectSize,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          _selectedStock == 0
+              ? 'Out of stock'
+              : 'Only $_selectedStock left available',
+          style: AppTextStyles.label.copyWith(
+            color: _selectedStock == 0 ? AppColors.error : AppColors.success,
+          ),
         ),
       ],
     );
@@ -212,6 +247,15 @@ class _OrderSetupPageState extends State<OrderSetupPage> {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
+                    if (item.size.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.xxs),
+                      Text(
+                        'Size ${item.size}',
+                        style: AppTextStyles.label.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -220,6 +264,55 @@ class _OrderSetupPageState extends State<OrderSetupPage> {
         ),
         const SizedBox(height: AppSpacing.lg),
         _buildSizeSection(),
+        const SizedBox(height: AppSpacing.lg),
+        _buildBuyNowQuantitySelector(item),
+      ],
+    );
+  }
+
+  Widget _buildBuyNowQuantitySelector(CartItem item) {
+    final stockLimit = _stockLimitForItem(item) ?? item.quantity;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Quantity',
+          style: AppTextStyles.label.copyWith(
+            color: AppColors.backgroundDark,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              onPressed: item.quantity > 1
+                  ? () => _updateQuantity(0, -1)
+                  : null,
+              icon: const Icon(Icons.remove_circle_outline),
+              color: AppColors.accent,
+            ),
+            SizedBox(
+              width: 42,
+              child: Text(
+                '${item.quantity}',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.backgroundDark,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            IconButton(
+              onPressed: item.quantity < stockLimit
+                  ? () => _updateQuantity(0, 1)
+                  : null,
+              icon: const Icon(Icons.add_circle_outline),
+              color: AppColors.accent,
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -286,6 +379,15 @@ class _OrderSetupPageState extends State<OrderSetupPage> {
                               color: AppColors.textSecondary,
                             ),
                           ),
+                          if (item.size.isNotEmpty) ...[
+                            const SizedBox(height: AppSpacing.xxs),
+                            Text(
+                              'Size ${item.size}',
+                              style: AppTextStyles.label.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -374,6 +476,14 @@ class _OrderSetupPageState extends State<OrderSetupPage> {
           ),
       ],
     );
+  }
+
+  int get _selectedStock => widget.sizes?[_selectedSize]?.stock ?? 0;
+
+  int? _stockLimitForItem(CartItem item) {
+    if (!widget.isBuyNow) return null;
+    if (item.size.isEmpty) return null;
+    return widget.sizes?[item.size]?.stock;
   }
 
   @override
@@ -475,6 +585,67 @@ class _OrderSetupPageState extends State<OrderSetupPage> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BuyNowSizeDropdown extends StatelessWidget {
+  const _BuyNowSizeDropdown({
+    required this.value,
+    required this.sizes,
+    required this.onChanged,
+  });
+
+  final String value;
+  final Map<String, SizeVariant> sizes;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final options = sortedSizeKeys(sizes);
+    final dropdownValue = options.contains(value) ? value : null;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: dropdownValue,
+            isExpanded: true,
+            hint: Text(
+              'Select size',
+              style: AppTextStyles.label.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            items: options.map((size) {
+              final stock = sizes[size]?.stock ?? 0;
+              return DropdownMenuItem<String>(
+                value: size,
+                enabled: stock > 0,
+                child: Text(
+                  stock > 0 ? size : '$size - Out of stock',
+                  style: AppTextStyles.label.copyWith(
+                    color: stock > 0
+                        ? AppColors.backgroundDark
+                        : AppColors.textSecondary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              );
+            }).toList(),
+            onChanged: (size) {
+              if (size == null || size == value) return;
+              onChanged(size);
+            },
+          ),
         ),
       ),
     );
