@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -25,6 +27,8 @@ class _CheckoutVerificationPageState extends State<CheckoutVerificationPage> {
   bool _sending = false;
   bool _checking = false;
   bool _initializing = true;
+  int _resendCooldownSeconds = 0;
+  Timer? _resendCooldownTimer;
   _VerificationStatus _status = _VerificationStatus.notSent;
 
   PaymentSession? _paymentSession;
@@ -38,6 +42,12 @@ class _CheckoutVerificationPageState extends State<CheckoutVerificationPage> {
         _initializePaymentSession();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _resendCooldownTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _initializePaymentSession() async {
@@ -84,6 +94,7 @@ class _CheckoutVerificationPageState extends State<CheckoutVerificationPage> {
         throw StateError('Payment session is not ready.');
       }
 
+      await user.sendEmailVerification();
       _paymentSession = await _sessionService.markVerificationEmailSent(
         paymentSession.sessionId,
       );
@@ -93,6 +104,7 @@ class _CheckoutVerificationPageState extends State<CheckoutVerificationPage> {
           _status = _VerificationStatus.sent;
         });
       }
+      _startResendCooldown();
       _showMessage('Verification email sent');
     } catch (error) {
       if (!mounted) return;
@@ -167,6 +179,44 @@ class _CheckoutVerificationPageState extends State<CheckoutVerificationPage> {
         });
       }
     }
+  }
+
+  void _startResendCooldown() {
+    _resendCooldownTimer?.cancel();
+    if (!mounted) return;
+
+    setState(() {
+      _resendCooldownSeconds = 30;
+    });
+
+    _resendCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      if (_resendCooldownSeconds <= 1) {
+        timer.cancel();
+        setState(() {
+          _resendCooldownSeconds = 0;
+        });
+        return;
+      }
+
+      setState(() {
+        _resendCooldownSeconds -= 1;
+      });
+    });
+  }
+
+  String get _sendButtonLabel {
+    if (_sending) return 'Sending...';
+    if (_resendCooldownSeconds > 0) {
+      return 'Resend available in ${_resendCooldownSeconds}s';
+    }
+    return _status == _VerificationStatus.notSent
+        ? 'Send Email'
+        : 'Resend Link';
   }
 
   String get _verificationStatusLabel {
@@ -284,7 +334,10 @@ class _CheckoutVerificationPageState extends State<CheckoutVerificationPage> {
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   OutlinedButton(
-                    onPressed: _sending || _paymentSession == null
+                    onPressed:
+                        _sending ||
+                            _resendCooldownSeconds > 0 ||
+                            _paymentSession == null
                         ? null
                         : _sendVerificationEmail,
                     style: OutlinedButton.styleFrom(
@@ -297,7 +350,7 @@ class _CheckoutVerificationPageState extends State<CheckoutVerificationPage> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                    child: Text(_sending ? 'Sending...' : 'Send Email'),
+                    child: Text(_sendButtonLabel),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   ElevatedButton(

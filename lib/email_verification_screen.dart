@@ -96,7 +96,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   void _startCooldown() {
     _cooldownTimer?.cancel();
     setState(() {
-      _cooldownSeconds = 60;
+      _cooldownSeconds = 30;
     });
     _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_cooldownSeconds <= 1) {
@@ -189,7 +189,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                         const SizedBox(height: AppSpacing.sm),
                         AuthButton(
                           label: _cooldownSeconds > 0
-                              ? 'Resend Email ($_cooldownSeconds)s'
+                              ? 'Resend available in ${_cooldownSeconds}s'
                               : 'Resend Email',
                           onPressed: _resendVerificationEmail,
                           isLoading: _isResending,
